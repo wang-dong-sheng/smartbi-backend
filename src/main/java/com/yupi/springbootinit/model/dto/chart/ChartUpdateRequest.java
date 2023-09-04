@@ -27,6 +27,11 @@ public class ChartUpdateRequest implements Serializable {
     private String goal;
 
     /**
+     *图标名称
+     */
+    private String name;
+
+    /**
      * 图标数据
      */
     private String chartData;

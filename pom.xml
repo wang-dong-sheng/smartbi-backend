@@ -123,6 +123,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+<!--        yuAPI-->
+        <dependency>
+            <groupId>com.yucongming</groupId>
+            <artifactId>yucongming-java-sdk</artifactId>
+            <version>0.0.3</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -130,6 +136,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+
                 <configuration>
                     <excludes>
                         <exclude>
@@ -139,7 +146,19 @@
                     </excludes>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
+            </plugin>
+
+
         </plugins>
     </build>
 
 </project>
+
+
