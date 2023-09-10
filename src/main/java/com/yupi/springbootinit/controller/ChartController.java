@@ -1,5 +1,6 @@
 package com.yupi.springbootinit.controller;
 
+import cn.hutool.core.io.FileUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.google.gson.Gson;
@@ -14,6 +15,7 @@ import com.yupi.springbootinit.constant.UserConstant;
 import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.exception.ThrowUtils;
 import com.yupi.springbootinit.manager.AiManager;
+import com.yupi.springbootinit.manager.RedisLimitManager;
 import com.yupi.springbootinit.model.dto.chart.*;
 import com.yupi.springbootinit.model.dto.file.UploadFileRequest;
 import com.yupi.springbootinit.model.entity.Chart;
@@ -35,6 +37,8 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -56,6 +60,8 @@ public class ChartController {
 
     @Resource
     private AiManager aiManager;
+    @Resource
+    private RedisLimitManager redisLimitManager;
 
     private final static Gson GSON = new Gson();
 
@@ -269,9 +275,26 @@ public class ChartController {
         //校验,如果目标为空则抛出异常
         ThrowUtils.throwIf(StringUtils.isEmpty(goal),ErrorCode.PARAMS_ERROR,"目标为空");
         ThrowUtils.throwIf(StringUtils.isEmpty(name)&&name.length()>100,ErrorCode.PARAMS_ERROR,"名称过长");
+        //校验文件
+        long fileSize = multipartFile.getSize();//文件大小
+        String originalFilename = multipartFile.getOriginalFilename();
+        //检验文件大小
+        final Integer ONE_MB=1*1024*1024;//默认单位为字节
+        ThrowUtils.throwIf(fileSize>ONE_MB,ErrorCode.PARAMS_ERROR,"文件超过1MB");
+
+        //校验文件后缀名
+        //直接调用hootu别人做好的工具类,
+        String suffix = FileUtil.getSuffix(originalFilename);
+        //定义可通过的文件名后缀
+        final List<String> list = Arrays.asList("xls", "xlsx");
+
+        ThrowUtils.throwIf(!list.contains(suffix),ErrorCode.PARAMS_ERROR,"文件后缀非法");
 
         //必须登录才能访问
         User loginUser = userService.getLoginUser(request);
+
+        //设置限流器，限流判断每个用户都有对应的限流器
+        redisLimitManager.doRateLimit("genChartByAi_"+loginUser.getId());
 
 
         //如果在平台已经设置了模型prompt，就不需要设置了
