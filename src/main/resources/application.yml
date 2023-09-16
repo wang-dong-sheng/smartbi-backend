@@ -1,6 +1,4 @@
-# 公共配置文件
-# @author <a href="https://github.com/liyupi">程序员鱼皮</a>
-# @from <a href="https://yupi.icu">编程导航知识星球</a>
+
 
 
 spring:
@@ -35,6 +33,7 @@ spring:
     timeout: 5000
 #    password: 123456
   # Elasticsearch 配置
+
   # todo 需替换配置，然后取消注释
 #  elasticsearch:
 #    uris: http://localhost:9200
@@ -45,6 +44,11 @@ spring:
     multipart:
       # 大小限制
       max-file-size: 10MB
+  rabbitmq:
+    host: localhost
+    port: 5672
+    password: guest
+    username: guest
 server:
   address: 0.0.0.0
   port: 8101

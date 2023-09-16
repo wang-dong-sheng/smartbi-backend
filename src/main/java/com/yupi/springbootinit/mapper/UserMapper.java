@@ -2,6 +2,7 @@ package com.yupi.springbootinit.mapper;
 
 import com.yupi.springbootinit.model.entity.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 
 /**
 * @author champion
@@ -9,6 +10,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 * @createDate 2023-08-30 17:57:54
 * @Entity com.yupi.springbootinit.model.entity.User
 */
+
 public interface UserMapper extends BaseMapper<User> {
 
 }
