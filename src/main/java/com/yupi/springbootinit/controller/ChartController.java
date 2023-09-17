@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.google.gson.Gson;
 import com.yupi.springbootinit.annotation.AuthCheck;
+import com.yupi.springbootinit.bizmq.BiMessageProducer;
 import com.yupi.springbootinit.common.BaseResponse;
 import com.yupi.springbootinit.common.DeleteRequest;
 import com.yupi.springbootinit.common.ErrorCode;
@@ -67,6 +68,10 @@ public class ChartController {
 
     @Resource
     private ThreadPoolExecutor threadPoolExecutor;
+
+    @Resource
+    private BiMessageProducer biMessageProducer;
+
     private final static Gson GSON = new Gson();
 
     // region 增删改查
@@ -512,6 +517,117 @@ public class ChartController {
 
         BiResponse biResponse = new BiResponse();
         biResponse.setChartId(chart.getId());
+
+        return ResultUtils.success(biResponse);
+    }
+
+
+
+    /**
+     * 智能分析（异步消息队列）
+     *
+     * @param multipartFile
+     * @param genChartByAiRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/gen/async/mq")
+    public BaseResponse<BiResponse> genChartByAiAsyncMq(@RequestPart("file") MultipartFile multipartFile,
+                                                      GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
+
+
+        String name = genChartByAiRequest.getName();
+        String goal = genChartByAiRequest.getGoal();
+        String chartType = genChartByAiRequest.getChartType();
+        //校验,如果目标为空则抛出异常
+        ThrowUtils.throwIf(StringUtils.isEmpty(goal), ErrorCode.PARAMS_ERROR, "目标为空");
+        ThrowUtils.throwIf(StringUtils.isEmpty(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "名称过长");
+        //校验文件
+        long fileSize = multipartFile.getSize();//文件大小
+        String originalFilename = multipartFile.getOriginalFilename();
+        //检验文件大小
+        final Integer ONE_MB = 1 * 1024 * 1024;//默认单位为字节
+        ThrowUtils.throwIf(fileSize > ONE_MB, ErrorCode.PARAMS_ERROR, "文件超过1MB");
+
+        //校验文件后缀名
+        //直接调用hootu别人做好的工具类,
+        String suffix = FileUtil.getSuffix(originalFilename);
+        //定义可通过的文件名后缀
+        final List<String> list = Arrays.asList("xls", "xlsx");
+
+        ThrowUtils.throwIf(!list.contains(suffix), ErrorCode.PARAMS_ERROR, "文件后缀非法");
+
+        //必须登录才能访问
+        User loginUser = userService.getLoginUser(request);
+
+        //设置限流器，限流判断每个用户都有对应的限流器
+        redisLimitManager.doRateLimit("genChartByAi_" + loginUser.getId());
+
+
+        //如果在平台已经设置了模型prompt，就不需要设置了
+//        //系统预设
+//        final String prompt="你是一个数据分析师和前端开发专家，接下来我会按照以下固定格式给你提供内容： \n" +
+//                "分析需求： \n" +
+//                "{数据分析的需求或目标}\n" +
+//                "原始数据： \n" +
+//                "{csv格式的原始数据,用,作为分隔符}\n" +
+//                " 请根据根据这两部分内容，按照以下指定格式格式生成内容（此外不要输出任何多余的开头、结尾、注释等内容）\n" +
+//                "【【【【【\n" +
+//                "{前端 Echarts V5 的 option 配置对象 js 代码，合理的将数据可视化，不要生成多余的内容比如注释}\n" +
+//                "【【【【【\n" +
+//                "{明确数据分析结论，越详细越好，不要生成多余的注释}";
+////
+        long modelId = CommonConstant.BI_MODEL_ID;
+        //需求分析：
+        //分析网站用户的增长情况
+        //原始数据如下：
+        //日期,用户数
+        //1,10
+        //2,20
+        //3,30
+
+
+//        //用户输入：
+//        StringBuffer userInput = new StringBuffer();
+//        userInput.append("需求分析：").append("\n");
+//        //拼接分析目标
+//        String userGoal = goal;
+//        if (chartType != null) {
+//            userGoal = "请使用:" + chartType + userGoal;
+//        }
+//
+//        userInput.append(userGoal).append("\n");
+//        userInput.append("原始数据如下：：").append("\n");
+//
+//        //压缩后的数据
+        String csvData = ExcelUtils.excelToCsv(multipartFile);
+//        userInput.append(csvData).append("\n");
+
+        //插入到数据库中进行保存
+        Chart chart = new Chart();
+        chart.setGoal(goal);
+        chart.setChartData(csvData);
+        chart.setChartType(chartType);
+        chart.setStatus("wait");
+        chart.setUserId(loginUser.getId());
+        chart.setName(loginUser.getUserName());
+        //保存
+        boolean saveResult = chartService.save(chart);
+        if (!saveResult) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "图表保存失败");
+        }
+        Long newChartId = chart.getId();
+
+        //调用任务
+        // todo 建议处理任务队列满之后，抛异常的情况
+        //将用线程池来处理ai服务器，换成用消息队列来处理
+//        CompletableFuture.runAsync(() -> {
+//        },threadPoolExecutor);
+
+        biMessageProducer.sendMessage(String.valueOf(newChartId));
+
+        BiResponse biResponse = new BiResponse();
+        biResponse.setChartId(newChartId);
 
         return ResultUtils.success(biResponse);
     }
