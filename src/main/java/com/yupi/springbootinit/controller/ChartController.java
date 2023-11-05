@@ -1,6 +1,10 @@
 package com.yupi.springbootinit.controller;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.google.gson.Gson;
@@ -12,6 +16,7 @@ import com.yupi.springbootinit.common.ErrorCode;
 import com.yupi.springbootinit.common.ResultUtils;
 import com.yupi.springbootinit.constant.CommonConstant;
 import com.yupi.springbootinit.constant.FileConstant;
+import com.yupi.springbootinit.constant.RedisConstant;
 import com.yupi.springbootinit.constant.UserConstant;
 import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.exception.ThrowUtils;
@@ -32,13 +37,15 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.io.File;
-import java.util.ArrayList;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -72,7 +79,10 @@ public class ChartController {
     @Resource
     private BiMessageProducer biMessageProducer;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
     private final static Gson GSON = new Gson();
+
 
     // region 增删改查
 
@@ -192,17 +202,32 @@ public class ChartController {
     @PostMapping("/my/list/page")
     public BaseResponse<Page<Chart>> listMyChartByPage(@RequestBody ChartQueryRequest chartQueryRequest,
                                                        HttpServletRequest request) {
+
         if (chartQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
+
+        //redis查询
+        String key=RedisConstant.CHAR_LIST_KEY+loginUser.getId();
+        String s = stringRedisTemplate.opsForValue().get(key);
+        if (StrUtil.isNotBlank(s) ){
+            Page bean = JSONUtil.toBean(s, Page.class);
+            return ResultUtils.success(bean);
+        }
         chartQueryRequest.setUserId(loginUser.getId());
         long current = chartQueryRequest.getCurrent();
         long size = chartQueryRequest.getPageSize();
+
+
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
         Page<Chart> chartPage = chartService.page(new Page<>(current, size),
                 getQueryWrapper(chartQueryRequest));
+
+        //将查询的数据存放在redis中
+        stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(chartPage));
+
         return ResultUtils.success(chartPage);
     }
 
@@ -363,11 +388,16 @@ public class ChartController {
         chart.setGenResult(genResult);
         chart.setUserId(loginUser.getId());
         chart.setName(loginUser.getUserName());
+        chart.setStatus("succeed");
         //保存
         boolean saveResult = chartService.save(chart);
         if (!saveResult){
             throw  new BusinessException(ErrorCode.SYSTEM_ERROR,"图标保存失败");
         }
+
+        //数据库更新完成后，删除redis中的缓存
+        String key=RedisConstant.CHAR_LIST_KEY+loginUser.getId();
+        stringRedisTemplate.delete(key);
 
 
         BiResponse biResponse = new BiResponse();
@@ -471,6 +501,10 @@ public class ChartController {
         if (!saveResult) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "图表保存失败");
         }
+        //数据库更新完成后，删除redis中的缓存
+        String key=RedisConstant.CHAR_LIST_KEY+loginUser.getId();
+        stringRedisTemplate.delete(key);
+
 
         //调用任务
         // todo 建议处理任务队列满之后，抛异常的情况
@@ -616,6 +650,10 @@ public class ChartController {
         if (!saveResult) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "图表保存失败");
         }
+
+        //数据库更新完成后，删除redis中的缓存
+        String key=RedisConstant.CHAR_LIST_KEY+loginUser.getId();
+        stringRedisTemplate.delete(key);
         Long newChartId = chart.getId();
 
         //调用任务
@@ -624,7 +662,8 @@ public class ChartController {
 //        CompletableFuture.runAsync(() -> {
 //        },threadPoolExecutor);
 
-        biMessageProducer.sendMessage(String.valueOf(newChartId));
+        biMessageProducer.sendMessage(new String[]{String.valueOf(newChartId),
+                String.valueOf(loginUser.getId())});
 
         BiResponse biResponse = new BiResponse();
         biResponse.setChartId(newChartId);

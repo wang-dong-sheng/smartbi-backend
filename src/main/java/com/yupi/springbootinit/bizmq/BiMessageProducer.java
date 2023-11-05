@@ -19,7 +19,7 @@ public class BiMessageProducer {
      * 发消息
      * @param message
      */
-    public  void sendMessage(String message){
+    public  void sendMessage(String[] message){
         rabbitTemplate.convertAndSend(BiMqConstance.BI_EXCHANGE_NAME,BiMqConstance.BI_ROUNTINGKEY_NMAE,message);
     }
 }

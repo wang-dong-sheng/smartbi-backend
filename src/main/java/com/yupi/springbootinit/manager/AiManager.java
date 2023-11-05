@@ -30,7 +30,7 @@ public class AiManager {
         devChatRequest.setModelId(modelId);//1698271403607916545L
         devChatRequest.setMessage(massage);
         BaseResponse<DevChatResponse> response = yuCongMingClient.doChat(devChatRequest);
-        if(response==null){
+        if(response==null||response.getData()==null){
             throw new BusinessException(ErrorCode.SYSTEM_ERROR,"ai 相应错误");
         }
         return response.getData().toString();
