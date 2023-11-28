@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.annotation.*;
 
 import java.io.Serializable;
 import java.util.Date;
+
+import io.swagger.models.auth.In;
 import lombok.Data;
 
 /**
@@ -55,6 +57,15 @@ public class User implements Serializable {
      * 更新时间
      */
     private Date updateTime;
+
+    /**
+     * 用户剩余调用ai的次数
+     */
+    private Integer num;
+    /**
+     * 当前用户是否为会员
+     */
+    private Integer vip;
 
     /**
      * 是否删除

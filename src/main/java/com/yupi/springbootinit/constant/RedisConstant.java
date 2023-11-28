@@ -12,5 +12,13 @@ package com.yupi.springbootinit.constant;/**
  *@Version 1.0
  */
 public interface RedisConstant {
+    /**
+     * 记录图表的分页查询的前缀
+     */
     public final String CHAR_LIST_KEY="char:list:";
+
+    /**
+     * 用户签到的前缀
+     */
+    public final String USER_SIGN__KEY="user:sign:";
 }

@@ -12,13 +12,13 @@ import com.rabbitmq.client.ConnectionFactory;
 public class BiInitMain {
     public static void main(String[] args) {
         //如果修改了默认的用户名密码等需要重新设置
-//        factory.setUsername();
-//        factory.setHost();
-//        factory.setPassword();
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setUsername("champion");
+        factory.setHost("47.109.60.15");
+        factory.setPassword("@KunKun2023");
 
         try {
-            ConnectionFactory factory = new ConnectionFactory();
-            factory.setHost("localhost");
+
             //创建连接、创建频道
             Connection connection = factory.newConnection();
             Channel channel = connection.createChannel();

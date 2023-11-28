@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.yupi.springbootinit.common.ErrorCode;
 import com.yupi.springbootinit.constant.CommonConstant;
+import com.yupi.springbootinit.constant.RedisConstant;
 import com.yupi.springbootinit.exception.BusinessException;
+import com.yupi.springbootinit.exception.ThrowUtils;
 import com.yupi.springbootinit.mapper.UserMapper;
 import com.yupi.springbootinit.model.dto.user.UserQueryRequest;
 import com.yupi.springbootinit.model.entity.User;
@@ -17,11 +19,15 @@ import lombok.extern.slf4j.Slf4j;
 import me.chanjar.weixin.common.bean.WxOAuth2UserInfo;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.DigestUtils;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,6 +43,10 @@ import static com.yupi.springbootinit.constant.UserConstant.USER_LOGIN_STATE;
 @Service
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
 
     /**
      * 盐值，混淆密码
@@ -73,6 +83,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             User user = new User();
             user.setUserAccount(userAccount);
             user.setUserPassword(encryptPassword);
+            //新用户赠送5次机会
+            user.setNum(5);
             boolean saveResult = this.save(user);
             if (!saveResult) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败，数据库错误");
@@ -107,8 +119,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         // 3. 记录用户的登录态
         request.getSession().setAttribute(USER_LOGIN_STATE, user);
+
         return this.getLoginUserVO(user);
     }
+
+
 
 
     /**
@@ -117,6 +132,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * @param request
      * @return
      */
+//    @Override
+//    public User getLoginUser(HttpServletRequest request) {
+//        // 先判断是否已登录
+//        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+//        User currentUser = (User) userObj;
+//        if (currentUser == null || currentUser.getId() == null) {
+//            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+//        }
+//        // 从数据库查询（追求性能的话可以注释，直接走缓存）
+//        long userId = currentUser.getId();
+//        currentUser = this.getById(userId);
+//        if (currentUser == null) {
+//            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+//        }
+//         grantNum(userId);
+//
+//        return currentUser;
+//    }
+
     @Override
     public User getLoginUser(HttpServletRequest request) {
         // 先判断是否已登录
@@ -131,7 +165,38 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (currentUser == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
+        grantNum(currentUser);
+
         return currentUser;
+    }
+    private void grantNum(User loginUser){
+        //给用户授予访问次数
+        String key = RedisConstant.USER_SIGN__KEY + loginUser.getId();
+        //获取今天日期
+        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+//        获取当前是当月的第几天
+        int day = LocalDateTime.now().getDayOfMonth();
+        //查询当天是否记录已经登陆过
+        Boolean bit = stringRedisTemplate.opsForValue().getBit(key, (day - 1));
+        if (bit) {
+            return;
+        }
+        //没访问过，设置为已经访问
+        stringRedisTemplate.opsForValue().setBit(key, day - 1, true);
+        //更新数据库，现在是软件测试阶段，直接进行次数覆盖即可
+        //查询当前是否为会员
+
+        //是会员将次数设置为20次
+        Integer vip = loginUser.getVip();
+        if (vip==0){
+            //非会员设置为3次
+            loginUser.setNum(3);
+        }else {
+            //会员20次
+            loginUser.setNum(20);
+        }
+        boolean b = this.updateById(loginUser);
+        ThrowUtils.throwIf(b==false,ErrorCode.OPERATION_ERROR,"当前操作次数更新失败");
     }
 
     /**

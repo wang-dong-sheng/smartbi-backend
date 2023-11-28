@@ -8,7 +8,7 @@ spring:
   # todo 需替换配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/smartbi?useUnicode=true&useSSL=false&characterEncoding=UTF-8&serverTimezone=UTC
+    url: jdbc:mysql://47.109.60.15:3306/smartbi?useUnicode=true&useSSL=false&characterEncoding=UTF-8&serverTimezone=UTC
     username: root
     password: abc123
   # Redis 配置

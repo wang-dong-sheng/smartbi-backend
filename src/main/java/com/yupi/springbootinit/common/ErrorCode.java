@@ -18,6 +18,8 @@ public enum ErrorCode {
     SYSTEM_ERROR(50000, "系统内部异常"),
     OPERATION_ERROR(50001, "操作失败");
 
+
+
     /**
      * 状态码
      */

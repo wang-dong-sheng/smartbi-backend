@@ -50,6 +50,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 图标接口
@@ -207,16 +208,19 @@ public class ChartController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
-
+        //查询第几页
+        long current = chartQueryRequest.getCurrent();
         //redis查询
+        //设计key=业务逻辑+id+第几页,实现缓存每页的数据
         String key=RedisConstant.CHAR_LIST_KEY+loginUser.getId();
-        String s = stringRedisTemplate.opsForValue().get(key);
+        //使用current作为hash中的表项key
+        String s = (String) stringRedisTemplate.opsForHash().get(key,String.valueOf(current));
         if (StrUtil.isNotBlank(s) ){
             Page bean = JSONUtil.toBean(s, Page.class);
             return ResultUtils.success(bean);
         }
         chartQueryRequest.setUserId(loginUser.getId());
-        long current = chartQueryRequest.getCurrent();
+
         long size = chartQueryRequest.getPageSize();
 
 
@@ -226,8 +230,10 @@ public class ChartController {
                 getQueryWrapper(chartQueryRequest));
 
         //将查询的数据存放在redis中
-        stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(chartPage));
-
+        //将page对象转化为json储存在redis中
+        String jsonStr = JSONUtil.toJsonStr(chartPage);
+        stringRedisTemplate.opsForHash().put(key,String.valueOf(current),jsonStr);
+        stringRedisTemplate.expire(key,30, TimeUnit.SECONDS);
         return ResultUtils.success(chartPage);
     }
 
@@ -369,6 +375,9 @@ public class ChartController {
         String csvData= ExcelUtils.excelToCsv(multipartFile);
         userInput.append(csvData).append("\n");
         String res= aiManager.doChart(modelId, userInput.toString());
+        //使用次数-1
+        loginUser.setNum(loginUser.getNum()-1);
+        userService.updateById(loginUser);
 
 
         //将回答进行拆分
@@ -594,6 +603,11 @@ public class ChartController {
         //必须登录才能访问
         User loginUser = userService.getLoginUser(request);
 
+        //判断当前用户调用ai的次数是否大于0
+        Integer num = loginUser.getNum();
+        ThrowUtils.throwIf(num<=0,ErrorCode.OPERATION_ERROR,"今天的使用次数已用完");
+
+
         //设置限流器，限流判断每个用户都有对应的限流器
         redisLimitManager.doRateLimit("genChartByAi_" + loginUser.getId());
 
@@ -650,6 +664,9 @@ public class ChartController {
         if (!saveResult) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "图表保存失败");
         }
+        //使用次数-1
+        loginUser.setNum(loginUser.getNum()-1);
+        userService.updateById(loginUser);
 
         //数据库更新完成后，删除redis中的缓存
         String key=RedisConstant.CHAR_LIST_KEY+loginUser.getId();
@@ -682,5 +699,7 @@ public class ChartController {
         }
 
     }
+
+
 
 }

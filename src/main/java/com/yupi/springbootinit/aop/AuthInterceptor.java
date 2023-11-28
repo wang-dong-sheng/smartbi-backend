@@ -2,20 +2,28 @@ package com.yupi.springbootinit.aop;
 
 import com.yupi.springbootinit.annotation.AuthCheck;
 import com.yupi.springbootinit.common.ErrorCode;
+import com.yupi.springbootinit.constant.RedisConstant;
 import com.yupi.springbootinit.exception.BusinessException;
+import com.yupi.springbootinit.exception.ThrowUtils;
 import com.yupi.springbootinit.model.entity.User;
 import com.yupi.springbootinit.model.enums.UserRoleEnum;
 import com.yupi.springbootinit.service.UserService;
+
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+
 import org.apache.commons.lang3.StringUtils;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * 权限校验 AOP
@@ -29,6 +37,9 @@ public class AuthInterceptor {
 
     @Resource
     private UserService userService;
+
+
+
 
     /**
      * 执行拦截
@@ -62,8 +73,15 @@ public class AuthInterceptor {
                 }
             }
         }
-        // 通过权限校验，放行
+
+
         return joinPoint.proceed();
+    }
+
+    public static void main(String[] args) {
+        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        int day = LocalDateTime.now().getDayOfMonth();
+        System.out.println(day);
     }
 }
 

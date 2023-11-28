@@ -7,6 +7,7 @@ import com.yupi.springbootinit.constant.RedisConstant;
 import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.manager.AiManager;
 import com.yupi.springbootinit.model.entity.Chart;
+import com.yupi.springbootinit.model.entity.User;
 import com.yupi.springbootinit.service.ChartService;
 import com.yupi.springbootinit.service.UserService;
 import com.yupi.springbootinit.utils.ExcelUtils;
@@ -42,6 +43,9 @@ public class BiMessageConsumer {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    @Resource
+    private UserService userService;
+
     //指定程序监听的消息队列和确认机制
     //channel作用：负责和rabbitmq进行通信
     @SneakyThrows//会将异常处理掉，这里是为了便于测试，实际项目中还是进行异常处理
@@ -55,6 +59,7 @@ public class BiMessageConsumer {
        //先判断消息中是否有用，在判断存放在数据库中的数据是否有用
         log.info("收到消息:"+message.toString());
         long chartId=Long.parseLong(message[0]);
+        String userId=message[1];
         if (StringUtils.isBlank(message[0])){
             //如果失败消息拒绝
             //requeue是否要重新放回队列里面
@@ -76,6 +81,10 @@ public class BiMessageConsumer {
             channel.basicNack(diliveryTag,false,false);
             handlerUpdateChartError(chart.getId(), "更新图表执行中状态失败");
 //                        throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新图表中的状态失败");
+            //查询当前用户,失败ai调用次数+1
+            User user = userService.getById(userId);
+            user.setNum(user.getNum()+1);
+            userService.updateById(user);
             return;
         }
 
@@ -88,6 +97,7 @@ public class BiMessageConsumer {
             channel.basicNack(diliveryTag,false,false);
             handlerUpdateChartError(chart.getId(), "AI生成错误");
 //                        throw new BusinessException(ErrorCode.SYSTEM_ERROR, "AI生成错误");
+
             return;
         }
         //将ai生成的值划分后得到三个模块
@@ -108,16 +118,15 @@ public class BiMessageConsumer {
             channel.basicNack(diliveryTag,false,false);
             handlerUpdateChartError(chart.getId(), "更新图表成功状态失败");
 //                        throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新图表中的状态失败");
+
             return;
         }
 
         //图表更新完成时删除redis中的缓存
         //数据库更新完成后，删除redis中的缓存
-        String userId=message[1];
+
         String key= RedisConstant.CHAR_LIST_KEY+userId;
         stringRedisTemplate.delete(key);
-
-
         //如果处理成功，消息确认；
         channel.basicAck(diliveryTag,false);
     }
